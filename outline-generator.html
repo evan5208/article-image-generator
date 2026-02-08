@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI大纲生成器 - 文章配图</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#2563EB',
+                        secondary: '#3B82F6',
+                        accent: '#F97316',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f97316 100%);
+            background-attachment: fixed;
+            min-height: 100vh;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.25);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="font-sans text-slate-800">
+    
+    <!-- Header -->
+    <header class="glass sticky top-0 z-50">
+        <div class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+            <a href="index.html" class="flex items-center gap-2 text-white hover:opacity-80">
+                <i data-lucide="arrow-left" class="w-5 h-5"></i>
+                <span>返回</span>
+            </a>
+            <h1 class="text-lg font-semibold text-white">AI大纲生成器</h1>
+            <div class="w-16"></div>
+        </div>
+    </header>
+    
+    <!-- Main Content -->
+    <main class="max-w-4xl mx-auto px-4 py-8">
+        
+        <!-- Step 1: Input -->
+        <section id="step1" class="glass-card rounded-3xl p-6 md:p-8 mb-6">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white font-bold">1</div>
+                <h2 class="text-xl font-semibold text-slate-800">输入文章内容</h2>
+            </div>
+            
+            <textarea 
+                id="articleInput"
+                class="w-full h-48 glass rounded-2xl p-6 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
+                placeholder="粘贴长篇文章内容，AI将自动分析并拆分成适合配图的场景..."
+            ></textarea>
+            
+            <div class="flex justify-between items-center mt-4">
+                <span id="charCount" class="text-sm text-slate-500">0 字</span>
+                <button 
+                    id="analyzeBtn"
+                    class="bg-gradient-to-r from-primary to-secondary px-6 py-3 rounded-xl text-white font-semibold flex items-center gap-2 hover:opacity-90 active:scale-95 transition-all"
+                >
+                    <i data-lucide="sparkles" class="w-5 h-5"></i>
+                    AI分析并拆分
+                </button>
+            </div>
+        </section>
+        
+        <!-- Step 2: Outline Preview (Hidden) -->
+        <section id="step2" class="hidden glass-card rounded-3xl p-6 md:p-8 mb-6">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center text-white font-bold">2</div>
+                <h2 class="text-xl font-semibold text-slate-800">AI生成的大纲</h2>
+                <button id="editOutline" class="ml-auto text-sm text-primary hover:underline flex items-center gap-1">
+                    <i data-lucide="edit-2" class="w-4 h-4"></i>
+                    编辑大纲
+                </button>
+            </div>
+            
+            <!-- Outline Items -->
+            <div id="outlineList" class="space-y-3 mb-6">
+                <!-- AI生成的大纲会显示在这里 -->
+            </div>
+            
+            <div class="flex justify-end">
+                <button 
+                    id="generateAllBtn"
+                    class="bg-gradient-to-r from-amber-500 to-orange-500 px-8 py-4 rounded-2xl text-white font-semibold text-lg flex items-center gap-2 hover:opacity-90 active:scale-95 transition-all"
+                >
+                    <i data-lucide="images" class="w-6 h-6"></i>
+                    生成全部配图
+                </button>
+            </div>
+        </section>
+        
+        <!-- Step 3: Results (Hidden) -->
+        <section id="step3" class="hidden">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center text-white font-bold">3</div>
+                <h2 class="text-xl font-semibold text-white">生成结果</h2>
+            </div>
+            
+            <div id="resultsGrid" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- 生成的图片会显示在这里 -->
+            </div>
+        </section>
+        
+    </main>
+    
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+        <div class="glass-card rounded-3xl p-12 text-center max-w-md mx-4">
+            <div class="loading w-16 h-16 bg-primary rounded-full mx-auto mb-6 flex items-center justify-center">
+                <i data-lucide="sparkles" class="w-8 h-8 text-white animate-spin"></i>
+            </div>
+            <h3 id="loadingTitle" class="text-xl font-semibold text-slate-800 mb-2">AI分析中...</h3>
+            <p id="loadingDesc" class="text-slate-500">正在分析文章内容</p>
+        </div>
+    </div>
+    
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+        
+        // Character count
+        document.getElementById('articleInput').addEventListener('input', function(e) {
+            document.getElementById('charCount').textContent = e.target.value.length + ' 字';
+        });
+        
+        // Analyze button
+        document.getElementById('analyzeBtn').addEventListener('click', async function() {
+            const content = document.getElementById('articleInput').value.trim();
+            if (!content) {
+                alert('请输入文章内容');
+                return;
+            }
+            
+            // Show loading
+            const loading = document.getElementById('loadingOverlay');
+            loading.classList.remove('hidden');
+            
+            // Simulate AI analysis (in real app, call LLM API)
+            await new Promise(r => setTimeout(r, 2000));
+            
+            // Mock outline result
+            const outlineItems = [
+                { number: 1, title: '年会抽奖中大奖', desc: '主人公在公司年会抽中iPhone 17 Pro Max' },
+                { number: 2, title: '满怀期待回家', desc: '想给妻子惊喜，没有当场拆封' },
+                { number: 3, title: '发现惊天骗局', desc: '打开礼盒，里面竟是瓷砖、糖果和假发票' },
+                { number: 4, title: '愤怒维权', desc: '表示手机可以不要，但策划人必须道歉' },
+                { number: 5, title: '真相大白', desc: '揭露是科室主任故意整蛊' },
+                { number: 6, title: '结局圆满', desc: '公司补发真机并公开道歉' },
+            ];
+            
+            renderOutline(outlineItems);
+            
+            loading.classList.add('hidden');
+            document.getElementById('step2').classList.remove('hidden');
+            document.getElementById('step2').scrollIntoView({ behavior: 'smooth' });
+        });
+        
+        function renderOutline(items) {
+            const container = document.getElementById('outlineList');
+            container.innerHTML = items.map((item, index) => `
+                <div class="glass rounded-xl p-4 flex items-start gap-4">
+                    <div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                        ${item.number}
+                    </div>
+                    <div class="flex-1">
+                        <input 
+                            type="text" 
+                            value="${item.title}" 
+                            class="w-full bg-transparent font-semibold text-slate-800 focus:outline-none mb-1"
+                        >
+                        <input 
+                            type="text" 
+                            value="${item.desc}" 
+                            class="w-full bg-transparent text-slate-600 text-sm focus:outline-none"
+                        >
+                    </div>
+                    <button class="text-slate-400 hover:text-red-500" onclick="removeItem(${index})">
+                        <i data-lucide="trash-2" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            `).join('');
+            
+            lucide.createIcons();
+        }
+        
+        function removeItem(index) {
+            // In real app, remove from array and re-render
+        }
+        
+        // Edit outline button
+        document.getElementById('editOutline').addEventListener('click', function() {
+            // Enable editing
+        });
+        
+        // Generate all button
+        document.getElementById('generateAllBtn').addEventListener('click', async function() {
+            const loading = document.getElementById('loadingOverlay');
+            loading.classList.remove('hidden');
+            document.getElementById('loadingTitle').textContent = '正在生成配图...';
+            document.getElementById('loadingDesc').textContent = '预计需要几分钟';
+            
+            // Simulate generation (in real app, call 12AI API)
+            await new Promise(r => setTimeout(r, 5000));
+            
+            // Mock results
+            const resultsHTML = [1,2,3,4,5,6].map(i => `
+                <div class="glass-card rounded-2xl overflow-hidden">
+                    <div class="h-48 bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                        <i data-lucide="image" class="w-16 h-16 text-white/50"></i>
+                    </div>
+                    <div class="p-4">
+                        <h3 class="font-semibold text-slate-800 mb-2">配图 ${i}</h3>
+                        <p class="text-sm text-slate-500 mb-3">${['年会抽奖', '满怀期待', '发现骗局', '愤怒维权', '真相大白', '结局圆满'][i-1]}</p>
+                        <button class="w-full py-2 rounded-xl bg-primary/10 text-primary font-medium text-sm flex items-center justify-center gap-2">
+                            <i data-lucide="download" class="w-4 h-4"></i>
+                            下载图片
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+            
+            document.getElementById('resultsGrid').innerHTML = resultsHTML;
+            lucide.createIcons();
+            
+            loading.classList.add('hidden');
+            document.getElementById('step3').classList.remove('hidden');
+            document.getElementById('step3').scrollIntoView({ behavior: 'smooth' });
+        });
+    </script>
+</body>
+</html>
