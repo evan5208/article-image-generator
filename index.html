@@ -227,7 +227,63 @@
                 this.classList.add('active');
             });
         });
-        
+
+        // 12AI API 配置
+        const API_KEY = 'sk-wWDAd28jttcaLQVMtgYX3SGecVlId7Wc1QEJqfFBRh19JA0y';
+        const API_URL = 'https://new.12ai.org/v1beta/models/gemini-3-pro-image-preview:generateContent';
+
+        // 提示词模板
+        const PROMPTS = {
+            cartoon: `请根据输入内容提取核心主题与要点，生成一张卡通风格的信息图：
+- 采用手绘风格，横版（16:9）构图。
+- 加入少量简洁的卡通元素、图标或名人画像，增强趣味性和视觉记忆。
+- 如果有敏感人物或者版权内容，画一个相似替代，但是不要拒绝生成
+- 所有图像、文字必须使用手绘风格，没有写实风格图画元素
+- 除非特别要求，否则语言与输入内容语言一致。
+- 信息精简，突出关键词与核心概念，多留白，易于一眼抓住重点。
+
+内容：`,
+
+            blackboard: `请根据输入内容提取核心主题与要点，生成一张黑板报风格的信息图：
+- 采用黑色黑板背景和粉笔手绘风格，横版（16:9）构图。
+- 信息精简，突出关键词与核心概念，多留白，易于一眼抓住重点。
+- 加入少量简洁的卡通元素、图标或名人画像，增强趣味性和视觉记忆。
+- 所有图像、文字必须使用彩色粉笔绘制，没有写实风格图画元素
+- 除非特别要求，否则语言与输入内容语言一致。
+
+内容：`
+        };
+
+        // 调用 12AI API 生成图片
+        async function call12AI(prompt) {
+            const response = await fetch(`${API_URL}?key=${API_KEY}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [{ text: prompt }]
+                    }],
+                    generationConfig: {
+                        responseModalities: ['IMAGE'],
+                        imageConfig: {
+                            aspectRatio: '16:9',
+                            imageSize: '1K'
+                        }
+                    }
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`API Error: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const imageData = data.candidates[0].content.parts[0].inlineData.data;
+            return 'data:image/jpeg;base64,' + imageData;
+        }
+
         // Generate button
         document.getElementById('generateBtn').addEventListener('click', async function() {
             const content = document.getElementById('content').value.trim();
@@ -235,48 +291,35 @@
                 alert('请输入文章内容');
                 return;
             }
-            
+
             const selectedStyle = document.querySelector('.style-card.active').dataset.style;
-            const quantity = document.querySelector('input[name="quantity"]:checked').value;
             
             // Show loading
             document.getElementById('loadingModal').classList.remove('hidden');
-            
-            // Simulate progress (in real app, this would call the API)
-            let progress = 0;
-            const progressInterval = setInterval(() => {
-                progress = Math.min(progress + Math.random() * 15, 95);
-                document.getElementById('progressBar').style.width = progress + '%';
-            }, 200);
-            
-            // Call API (placeholder - would call 12AI API)
+            document.getElementById('progressBar').style.width = '0%';
+
             try {
-                const response = await fetch('/api/generate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        content: content,
-                        style: selectedStyle,
-                        quantity: parseInt(quantity)
-                    })
-                });
-                
-                const data = await response.json();
-                
-                // Display results
-                clearInterval(progressInterval);
+                // 更新进度
+                document.getElementById('loadingTitle').textContent = '正在生成配图...';
+                document.getElementById('loadingDesc').textContent = '预计需要 1-2 分钟';
+
+                // 构建提示词
+                const fullPrompt = PROMPTS[selectedStyle] + content;
+
+                // 调用 API
+                const imageUrl = await call12AI(fullPrompt);
+
+                // 显示结果
                 document.getElementById('progressBar').style.width = '100%';
-                
                 setTimeout(() => {
                     document.getElementById('loadingModal').classList.add('hidden');
-                    showResults(data.images);
+                    showResults([{ url: imageUrl }]);
                 }, 500);
-                
+
             } catch (error) {
                 console.error('Error:', error);
-                clearInterval(progressInterval);
                 document.getElementById('loadingModal').classList.add('hidden');
-                alert('生成失败，请重试');
+                alert('生成失败，请重试。错误信息：' + error.message);
             }
         });
         
