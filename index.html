@@ -289,7 +289,7 @@
         };
 
         // 调用官方 Gemini API 生成图片
-        async function call12AI(prompt) {
+        async function callGemini(prompt) {
             // 官方 Gemini API
             const response = await fetch(API_URL + '?key=' + API_KEY, {
                 method: 'POST',
@@ -342,7 +342,7 @@
                 const fullPrompt = PROMPTS[selectedStyle] + content;
 
                 // 调用 API
-                const imageUrl = await call12AI(fullPrompt);
+                const imageUrl = await callGemini(fullPrompt);
 
                 // 显示结果
                 document.getElementById('progressBar').style.width = '100%';
