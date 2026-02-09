@@ -1,9 +1,1 @@
-{
-  "version": 2,
-  "functions": {
-    "api/*.js"
-  },
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" }
-  ]
-}
+{}
