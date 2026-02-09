@@ -1,133 +1,431 @@
-<!doctype html>
-<html lang="zh">
+<!DOCTYPE html>
+<html lang="zh-CN">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <title>Gemini Image Proxy Demo</title>
-    <style>
-        body { font-family: system-ui, -apple-system, Arial; padding: 16px; }
-        textarea { width: 100%; height: 140px; }
-        button { padding: 10px 14px; margin-top: 10px; }
-        pre { background: #f6f6f6; padding: 12px; overflow: auto; }
-        img { max-width: 100%; margin-top: 12px; border: 1px solid #ddd; }
-        .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-        select { padding: 8px; }
-    </style>
-</head>
-<body>
-    <h2>Gemini Image (via Local Proxy)</h2>
-    <div class="row">
-        <button id="btnHealth">检查后端/Key</button>
-        <button id="btnLoadModels">加载模型列表</button>
-        <label>选择模型：
-            <select id="modelSelect"></select>
-        </label>
-    </div>
-    <p>Prompt：</p>
-    <textarea id="prompt">生成一张 16:9 的未来城市夜景，霓虹灯，赛博朋克风。</textarea>
-    <br/>
-    <button id="btnGen">生成</button>
-    <p>日志：</p>
-    <pre id="log"></pre>
-    <p>结果：</p>
-    <img id="out" alt="generated image"/>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文章配图生成器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
     <script>
-        const API_BASE = "http://127.0.0.1:8787";
-        const logEl = document.getElementById("log");
-        const imgEl = document.getElementById("out");
-        const modelSel = document.getElementById("modelSelect");
-        
-        function log(...args) {
-            logEl.textContent += args.map(a => typeof a === "string" ? a : JSON.stringify(a, null, 2)).join(" ") + " ";
-            logEl.scrollTop = logEl.scrollHeight;
-        }
-        
-        async function http(path, options) {
-            const r = await fetch(API_BASE + path, options);
-            const t = await r.text();
-            if (!r.ok) throw new Error(`${path} ${r.status}: ${t}`);
-            return t;
-        }
-        
-        async function health() {
-            const t = await http("/api/health");
-            log("health:", t);
-        }
-        
-        async function listModels() {
-            const t = await http("/api/models");
-            const data = JSON.parse(t);
-            const models = data.models || [];
-            log(`models count: ${models.length}`);
-            models.sort((a,b) => {
-                const A = /image|vision|preview/i.test(a.name) ? 0 : 1;
-                const B = /image|vision|preview/i.test(b.name) ? 0 : 1;
-                return A - B;
-            });
-            modelSel.innerHTML = "";
-            for (const m of models) {
-                const opt = document.createElement("option");
-                opt.value = m.name.replace(/^models\//, "");
-                opt.textContent = m.name;
-                modelSel.appendChild(opt);
-            }
-            if (models[0]) {
-                modelSel.value = models[0].name.replace(/^models\//, "");
-                log("picked model:", modelSel.value);
-            } else {
-                log("No models available for this key.");
-            }
-        }
-        
-        async function generate(prompt) {
-            const model = modelSel.value;
-            if (!model) throw new Error("No model selected. Click 加载模型列表 first.");
-            const raw = await http("/api/generate", {
-                method: "POST",
-                headers: {"Content-Type":"application/json"},
-                body: JSON.stringify({ model, prompt })
-            });
-            const data = JSON.parse(raw);
-            const parts = data?.candidates?.[0]?.content?.parts ?? [];
-            let inline = null;
-            for (const p of parts) {
-                if (p.inlineData && p.inlineData.data) {
-                    inline = p.inlineData.data;
-                    break;
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            200: '#bbf7d0',
+                            300: '#86efac',
+                            400: '#4ade80',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                            800: '#166534',
+                            900: '#14532d',
+                        },
+                        dark: {
+                            100: '#1e293b',
+                            200: '#0f172a',
+                            300: '#020617',
+                        }
+                    },
+                    fontFamily: { sans: ['Noto Sans SC', 'sans-serif'] },
+                    animation: {
+                        'fade-in': 'fadeIn 0.5s ease-out',
+                        'slide-up': 'slideUp 0.5s ease-out',
+                        'pulse-slow': 'pulse 3s infinite',
+                    },
+                    keyframes: {
+                        fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+                        slideUp: { '0%': { opacity: '0', transform: 'translateY(20px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+                    }
                 }
             }
+        }
+    </script>
+    <style>
+        * { -webkit-tap-highlight-color: transparent; }
+        body { font-family: 'Noto Sans SC', sans-serif; }
+        .glass {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .glass-card {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
+            backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        .gradient-text {
+            background: linear-gradient(135deg, #22c55e 0%, #14b8a6 50%, #06b6d4 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .gradient-border {
+            position: relative;
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(20, 184, 166, 0.2));
+        }
+        .gradient-border::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            padding: 1px;
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.5), rgba(6, 182, 212, 0.5));
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+        }
+        .style-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .style-card:hover {
+            transform: translateY(-4px);
+        }
+        .style-card.active {
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(6, 182, 212, 0.15));
+            border-color: rgba(34, 197, 94, 0.5);
+            box-shadow: 0 0 30px rgba(34, 197, 94, 0.2);
+        }
+        textarea:focus, input:focus {
+            outline: none;
+            border-color: rgba(34, 197, 94, 0.5);
+            box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #22c55e 0%, #14b8a6 100%);
+            transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #16a34a 0%, #0d9488 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 40px -10px rgba(34, 197, 94, 0.4);
+        }
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+        .loading-circle {
+            background: conic-gradient(from 0deg, transparent 0%, #22c55e 50%, transparent 100%);
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .result-card {
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .result-card:hover {
+            transform: translateY(-8px) scale(1.02);
+        }
+        .floating-shapes {
+            position: fixed;
+            inset: 0;
+            overflow: hidden;
+            pointer-events: none;
+            z-index: -1;
+        }
+        .shape {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.3;
+            animation: float 20s infinite ease-in-out;
+        }
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(30px, -30px) scale(1.1); }
+            66% { transform: translate(-20px, 20px) scale(0.9); }
+        }
+    </style>
+</head>
+<body class="bg-dark-300 min-h-screen text-white antialiased">
+    <!-- 背景装饰 -->
+    <div class="floating-shapes">
+        <div class="shape w-96 h-96 bg-emerald-500/30 top-0 left-0" style="animation-delay: 0s;"></div>
+        <div class="shape w-80 h-80 bg-teal-500/30 top-1/3 right-0" style="animation-delay: 5s;"></div>
+        <div class="shape w-72 h-72 bg-cyan-500/20 bottom-0 left-1/3" style="animation-delay: 10s;"></div>
+    </div>
+
+    <!-- Password Modal -->
+    <div id="passwordModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="glass-card rounded-3xl p-10 text-center max-w-md w-full animate-fade-in">
+            <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center mx-auto mb-6 shadow-lg">
+                <i data-lucide="lock" class="w-8 h-8 text-white"></i>
+            </div>
+            <h2 class="text-2xl font-bold text-white mb-2">欢迎回来</h2>
+            <p class="text-slate-400 mb-8">请输入访问密码继续</p>
+            <input type="password" id="passwordInput" class="w-full px-5 py-4 rounded-2xl bg-dark-100 border border-slate-700 text-white placeholder-slate-500 focus:border-emerald-500 transition-all" placeholder="输入密码" onkeyup="if(event.key==='Enter')checkPassword()">
+            <p id="passwordError" class="text-red-400 text-sm mt-4 hidden">密码错误，请重试</p>
+            <button onclick="checkPassword()" class="w-full py-4 rounded-2xl btn-primary text-white font-semibold mt-6">
+                进入系统
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div id="mainContent" class="hidden">
+        <!-- Header -->
+        <header class="relative overflow-hidden">
+            <div class="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-transparent to-cyan-500/10"></div>
+            <div class="max-w-5xl mx-auto px-6 py-16 relative">
+                <div class="text-center animate-slide-up">
+                    <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm font-medium mb-6">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        AI 驱动的配图生成
+                    </div>
+                    <h1 class="text-5xl md:text-6xl font-bold mb-4">
+                        <span class="gradient-text">文章配图生成器</span>
+                    </h1>
+                    <p class="text-xl text-slate-400 max-w-2xl mx-auto">
+                        基于 Gemini AI 智能分析文章内容，一键生成专业级配图
+                    </p>
+                </div>
+            </div>
+        </header>
+
+        <!-- Generator Section -->
+        <main class="max-w-4xl mx-auto px-6 pb-20">
+            <div class="glass-card rounded-3xl p-8 animate-slide-up" style="animation-delay: 0.2s;">
+                <!-- Style Selection -->
+                <div class="mb-8">
+                    <label class="block text-sm font-medium text-slate-400 mb-4">选择风格</label>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="style-card active cursor-pointer rounded-2xl p-6 gradient-border" data-style="cartoon" onclick="selectStyle(this)">
+                            <div class="flex items-center gap-4">
+                                <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/20 flex items-center justify-center">
+                                    <i data-lucide="palette" class="w-7 h-7 text-emerald-400"></i>
+                                </div>
+                                <div>
+                                    <h3 class="font-semibold text-white text-lg">卡通风格</h3>
+                                    <p class="text-slate-400 text-sm">手绘卡通，信息图</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="style-card cursor-pointer rounded-2xl p-6 border border-slate-700 hover:border-slate-600" data-style="blackboard" onclick="selectStyle(this)">
+                            <div class="flex items-center gap-4">
+                                <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center">
+                                    <i data-lucide="blackboard" class="w-7 h-7 text-slate-300"></i>
+                                </div>
+                                <div>
+                                    <h3 class="font-semibold text-white text-lg">黑板报风格</h3>
+                                    <p class="text-slate-400 text-sm">粉笔手绘，怀旧风</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Content Input -->
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-slate-400 mb-3">文章内容</label>
+                    <textarea id="content" class="w-full h-48 px-5 py-4 rounded-2xl bg-dark-100 border border-slate-700 text-white placeholder-slate-500 resize-none transition-all" placeholder="粘贴您的文章内容，AI 将自动提取关键信息生成配图..."></textarea>
+                    <div class="flex justify-end mt-3">
+                        <span id="charCount" class="text-sm text-slate-500">0 字</span>
+                    </div>
+                </div>
+
+                <!-- Generate Button -->
+                <button id="generateBtn" onclick="generateImage()" class="w-full py-5 rounded-2xl btn-primary text-white font-semibold text-lg flex items-center justify-center gap-3">
+                    <i data-lucide="sparkles" class="w-6 h-6"></i>
+                    <span>生成配图</span>
+                </button>
+            </div>
+
+            <!-- Results Section -->
+            <div id="results" class="hidden mt-12">
+                <h2 class="text-3xl font-bold text-center mb-8">
+                    <span class="gradient-text">生成结果</span>
+                </h2>
+                <div id="resultsGrid" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="text-center py-8 text-slate-500 text-sm">
+            <p>Powered by evan</p>
+        </footer>
+    </div>
+
+    <!-- Loading Modal -->
+    <div id="loadingModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="glass-card rounded-3xl p-12 text-center max-w-sm w-full animate-fade-in">
+            <div class="relative w-24 h-24 mx-auto mb-8">
+                <div class="absolute inset-0 rounded-full loading-circle"></div>
+                <div class="absolute inset-2 rounded-full bg-dark-200 flex items-center justify-center">
+                    <i data-lucide="image-plus" class="w-10 h-10 text-emerald-400"></i>
+                </div>
+            </div>
+            <h3 id="loadingTitle" class="text-xl font-semibold text-white mb-2">正在生成配图...</h3>
+            <p id="loadingDesc" class="text-slate-400">AI 正在分析内容并生成配图</p>
+            <div class="mt-8">
+                <div class="h-1.5 bg-dark-100 rounded-full overflow-hidden">
+                    <div id="progressBar" class="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const API_BASE = isMobile ? "http://192.168.31.52:8787" : "http://127.0.0.1:8787";
+        const CORRECT_PASSWORD = 'evan';
+
+        function checkPassword() {
+            const input = document.getElementById('passwordInput').value;
+            if (input === CORRECT_PASSWORD) {
+                document.getElementById('passwordModal').classList.add('hidden');
+                document.getElementById('mainContent').classList.remove('hidden');
+                lucide.createIcons();
+            } else {
+                document.getElementById('passwordError').classList.remove('hidden');
+            }
+        }
+
+        lucide.createIcons();
+        document.getElementById('content').addEventListener('input', function(e) {
+            document.getElementById('charCount').textContent = e.target.value.length + ' 字';
+        });
+
+        function selectStyle(card) {
+            document.querySelectorAll('.style-card').forEach(c => {
+                c.classList.remove('active', 'gradient-border');
+                c.classList.add('border-slate-700');
+            });
+            card.classList.add('active', 'gradient-border');
+            card.classList.remove('border-slate-700');
+        }
+
+        const PROMPTS = {
+            cartoon: `请根据输入内容提取核心主题与要点，生成一张卡通风格的信息图：
+- 采用手绘风格，横版（16:9）构图。
+- 加入少量简洁的卡通元素、图标或名人画像，增强趣味性和视觉记忆。
+- 如果有敏感人物或者版权内容，画一个相似替代，但是不要拒绝生成
+- 所有图像、文字必须使用手绘风格，没有写实风格图画元素
+- 除非特别要求，否则语言与输入内容语言一致。
+- 信息精简，突出关键词与核心概念，多留白，易于一眼抓住重点。
+
+内容：`,
+
+            blackboard: `请根据输入内容提取核心主题与要点，生成一张黑板报风格的信息图：
+- 采用黑色黑板背景和粉笔手绘风格，横版（16:9）构图。
+- 信息精简，突出关键词与核心概念，多留白，易于一眼抓住重点。
+- 加入少量简洁的卡通元素、图标或名人画像，增强趣味性和视觉记忆。
+- 所有图像、文字必须使用彩色粉笔绘制，没有写实风格图画元素
+- 除非特别要求，否则语言与输入内容语言一致。
+
+内容：`
+        };
+
+        async function callGemini(prompt) {
+            const modelsRes = await fetch("/api/models");
+            const modelsText = await modelsRes.text();
+            const models = JSON.parse(modelsText).models || [];
+            
+            const imageModel = models.find(m => m.name.includes('gemini-3-pro-image-preview')) 
+                           || models.find(m => m.name.includes('nano-banana-pro'))
+                           || models.find(m => /image/i.test(m.name));
+            const model = imageModel ? imageModel.name.replace(/^models\//, "") : null;
+            
+            if (!model) throw new Error("No image generation model available");
+            
+            const response = await fetch(API_BASE + "/api/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ model, prompt })
+            });
+            
+            const raw = await response.text();
+            if (!response.ok) throw new Error(`generateContent ${response.status}: ${raw}`);
+            
+            const data = JSON.parse(raw);
+            const parts = data?.candidates?.[0]?.content?.parts ?? [];
+            const inline = parts.find(p => p.inlineData?.data)?.inlineData?.data;
+            
             if (!inline) {
                 const text = parts.map(p => p.text).filter(Boolean).join(" ");
-                throw new Error("No inlineData image returned. Text: " + (text || "(empty)"));
+                throw new Error("No image returned. Text: " + (text || "(empty)"));
             }
-            const mime = (parts.find(p => p.inlineData?.mimeType)?.inlineData?.mimeType) || "image/png";
-            return `data:${mime};base64,` + inline;
+            
+            return "data:image/png;base64," + inline;
         }
-        
-        document.getElementById("btnHealth").onclick = async () => {
-            logEl.textContent = "";
-            imgEl.removeAttribute("src");
-            try { await health(); } catch(e){ log("ERROR:", String(e)); }
-        };
-        
-        document.getElementById("btnLoadModels").onclick = async () => {
-            logEl.textContent = "";
-            imgEl.removeAttribute("src");
-            try { await listModels(); } catch(e){ log("ERROR:", String(e)); }
-        };
-        
-        document.getElementById("btnGen").onclick = async () => {
-            imgEl.removeAttribute("src");
-            try {
-                const prompt = document.getElementById("prompt").value;
-                log("Generating...");
-                const dataUrl = await generate(prompt);
-                imgEl.src = dataUrl;
-                log("Done.");
-            } catch(e) {
-                log("ERROR:", String(e));
+
+        document.getElementById('generateBtn').addEventListener('click', async function() {
+            const content = document.getElementById('content').value.trim();
+            if (!content) {
+                alert('请输入文章内容');
+                return;
             }
-        };
+
+            const selectedStyle = document.querySelector('.style-card.active').dataset.style;
+            
+            document.getElementById('loadingModal').classList.remove('hidden');
+            document.getElementById('progressBar').style.width = '0%';
+
+            try {
+                let progress = 0;
+                const progressInterval = setInterval(() => {
+                    progress = Math.min(progress + Math.random() * 15, 85);
+                    document.getElementById('progressBar').style.width = progress + '%';
+                }, 500);
+
+                const fullPrompt = PROMPTS[selectedStyle] + content;
+                const imageUrl = await callGemini(fullPrompt);
+
+                clearInterval(progressInterval);
+                document.getElementById('progressBar').style.width = '100%';
+                setTimeout(() => {
+                    document.getElementById('loadingModal').classList.add('hidden');
+                    showResults([{ url: imageUrl }]);
+                }, 500);
+
+            } catch (error) {
+                document.getElementById('loadingModal').classList.add('hidden');
+                alert('生成失败，请重试。错误信息：' + error.message);
+            }
+        });
+
+        function showResults(images) {
+            const grid = document.getElementById('resultsGrid');
+            grid.innerHTML = '';
+            
+            images.forEach((img, index) => {
+                const div = document.createElement('div');
+                div.className = 'result-card glass-card rounded-2xl overflow-hidden';
+                div.innerHTML = `
+                    <img src="${img.url}" alt="生成结果 ${index + 1}" class="w-full h-auto">
+                    <div class="p-4 flex gap-3">
+                        <button onclick="downloadImage('${img.url}', 'article-image-${Date.now()}.png')" class="flex-1 py-3 rounded-xl btn-primary text-white font-medium flex items-center justify-center gap-2">
+                            <i data-lucide="download" class="w-5 h-5"></i>
+                            下载配图
+                        </button>
+                    </div>
+                    <p class="text-center text-slate-400 text-sm pb-4">💡 提示：手机端可长按图片直接保存到相册</p>
+                `;
+                grid.appendChild(div);
+            });
+            
+            lucide.createIcons();
+            document.getElementById('results').classList.remove('hidden');
+            document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function downloadImage(url, filename) {
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            link.target = '_blank';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
     </script>
 </body>
 </html>

@@ -2,6 +2,14 @@ import express from "express";
 const app = express();
 app.use(express.json({ limit: "10mb" }));
 
+app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type");
+    if (req.method === "OPTIONS") return res.sendStatus(200);
+    next();
+});
+
 const API_KEY = process.env.GOOGLE_API_KEY;
 const BASE = "https://generativelanguage.googleapis.com/v1beta";
 
@@ -13,11 +21,7 @@ function mustKey() {
 }
 
 app.get("/api/health", (req, res) => {
-    res.json({
-        ok: true,
-        hasKey: !!API_KEY,
-        keyLen: API_KEY ? API_KEY.length : 0,
-    });
+    res.json({ ok: true, hasKey: !!API_KEY, keyLen: API_KEY ? API_KEY.length : 0 });
 });
 
 app.get("/api/models", async (req, res) => {
@@ -39,6 +43,7 @@ app.post("/api/generate", async (req, res) => {
             return res.status(400).json({ error: "model and prompt required" });
         }
         const url = `${BASE}/models/${model}:generateContent?key=${API_KEY}`;
+        // 不指定 responseModalities，让模型根据 prompt 决定是否生成图片
         const payload = {
             contents: [{ parts: [{ text: prompt }] }],
         };
