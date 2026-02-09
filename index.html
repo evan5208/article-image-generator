@@ -290,6 +290,11 @@
 
         // 调用官方 Gemini API 生成图片
         async function callGemini(prompt) {
+            // Debug: API Key 验证
+            console.log("API_KEY exists:", !!API_KEY);
+            console.log("API_KEY len:", API_KEY?.length);
+            console.log("API_KEY head/tail:", API_KEY?.slice(0, 6), API_KEY?.slice(-4));
+            
             if (!API_KEY) throw new Error("Missing API key");
             
             // 获取可用模型列表
