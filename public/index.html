@@ -274,8 +274,10 @@
     </div>
 
     <script>
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        const API_BASE = isMobile ? "http://192.168.31.52:8787" : "http://127.0.0.1:8787";
+        // Vercel 部署时使用相对路径，本地使用本地后端
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const API_BASE = isLocalhost ? "http://127.0.0.1:8787" : "";
+        console.log("API Base:", API_BASE, "isLocalhost:", isLocalhost);
         const CORRECT_PASSWORD = 'evan';
 
         function checkPassword() {
