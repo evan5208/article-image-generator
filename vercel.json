@@ -1,16 +1,23 @@
 {
   "version": 2,
-  "framework": null,
-  "functions": {
-    "api/*.js": {
-      "runtime": "edge"
+  "builds": [
+    {
+      "src": "api/*.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "index.html",
+      "use": "static"
     }
-  },
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/(.*)", "dest": "/$1" }
   ],
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/$1" }
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "api/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/$1"
+    }
   ]
 }
