@@ -75,9 +75,43 @@
             0%, 100% { opacity: 1; }
             50% { opacity: .5; }
         }
+        /* 确保图片可以长按保存 */
+        #resultsGrid img {
+            -webkit-touch-callout: default;
+            touch-action: manipulation;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body class="font-sans text-slate-800">
+    
+    <!-- Password Protection -->
+    <div id="passwordOverlay" class="fixed inset-0 bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 z-50 flex items-center justify-center p-4">
+        <div class="glass-card rounded-3xl p-8 md:p-12 max-w-md w-full text-center">
+            <div class="w-20 h-20 bg-gradient-to-br from-primary to-purple-500 rounded-2xl mx-auto mb-6 flex items-center justify-center">
+                <i data-lucide="lock" class="w-10 h-10 text-white"></i>
+            </div>
+            <h1 class="text-2xl font-bold text-slate-800 mb-2">文章配图生成器</h1>
+            <p class="text-slate-500 mb-6">请输入访问密码</p>
+            <input 
+                type="password" 
+                id="passwordInput"
+                class="w-full py-4 px-6 rounded-xl glass border-2 border-slate-200 text-center text-lg focus:outline-none focus:border-primary mb-4"
+                placeholder="输入密码"
+                onkeypress="if(event.key==='Enter')checkPassword()"
+            >
+            <button 
+                onclick="checkPassword()"
+                class="w-full bg-gradient-to-r from-primary to-secondary py-4 rounded-xl text-white font-semibold text-lg hover:opacity-90 active:scale-95 transition-all"
+            >
+                进入
+            </button>
+            <p id="errorMsg" class="text-red-500 mt-4 hidden">密码错误，请重试</p>
+        </div>
+    </div>
+    
+    <!-- Main Content (hidden until password correct) -->
+    <main id="mainContent" class="hidden">
     
     <!-- Hero Section -->
     <section class="relative min-h-screen flex items-center justify-center px-4 py-20">
@@ -201,8 +235,8 @@
             <div class="loading w-16 h-16 bg-primary rounded-full mx-auto mb-6 flex items-center justify-center">
                 <i data-lucide="image-plus" class="w-8 h-8 text-white animate-spin"></i>
             </div>
-            <h3 class="text-xl font-semibold text-slate-800 mb-2">正在生成配图...</h3>
-            <p class="text-slate-500">预计需要 1-2 分钟</p>
+            <h3 id="loadingTitle" class="text-xl font-semibold text-slate-800 mb-2">正在生成配图...</h3>
+            <p id="loadingDesc" class="text-slate-500">预计需要 1-2 分钟</p>
             <div class="mt-6">
                 <div class="h-2 bg-slate-200 rounded-full overflow-hidden">
                     <div id="progressBar" class="h-full bg-primary rounded-full transition-all duration-300" style="width: 0%"></div>
@@ -228,9 +262,9 @@
             });
         });
 
-        // 12AI API 配置
-        const API_KEY = 'sk-wWDAd28jttcaLQVMtgYX3SGecVlId7Wc1QEJqfFBRh19JA0y';
-        const API_URL = 'https://new.12ai.org/v1beta/models/gemini-3-pro-image-preview:generateContent';
+        // 官方 Gemini API 配置
+        const API_KEY = 'AIzaSyCWZhr9vUaNJHXULNCxhN1gtWg4tbCmlFo';
+        const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent';
 
         // 提示词模板
         const PROMPTS = {
@@ -254,34 +288,35 @@
 内容：`
         };
 
-        // 调用 12AI API 生成图片
+        // 调用官方 Gemini API 生成图片
         async function call12AI(prompt) {
-            const response = await fetch(`${API_URL}?key=${API_KEY}`, {
+            // 官方 Gemini API
+            const response = await fetch(API_URL + '?key=' + API_KEY, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    contents: [{
-                        parts: [{ text: prompt }]
-                    }],
+                    contents: [{ parts: [{ text: prompt }] }],
                     generationConfig: {
                         responseModalities: ['IMAGE'],
-                        imageConfig: {
-                            aspectRatio: '16:9',
-                            imageSize: '1K'
-                        }
+                        imageConfig: { aspectRatio: '16:9', imageSize: '1K' }
                     }
                 })
             });
 
             if (!response.ok) {
-                throw new Error(`API Error: ${response.status}`);
+                const errorText = await response.text();
+                throw new Error(`API Error ${response.status}: ${errorText}`);
             }
 
             const data = await response.json();
-            const imageData = data.candidates[0].content.parts[0].inlineData.data;
-            return 'data:image/jpeg;base64,' + imageData;
+            if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].inlineData) {
+                const imageData = data.candidates[0].content.parts[0].inlineData.data;
+                return 'data:image/jpeg;base64,' + imageData;
+            } else {
+                throw new Error('API返回格式错误: ' + JSON.stringify(data));
+            }
         }
 
         // Generate button
@@ -329,17 +364,15 @@
             
             resultsGrid.innerHTML = '';
             images.forEach((img, index) => {
-                resultsGrid.innerHTML += `
+                resultsGrid.innerHTML = `
                     <div class="glass-card rounded-2xl overflow-hidden">
-                        <img src="${img.url}" alt="生成的配图 ${index + 1}" class="w-full h-48 object-cover">
-                        <div class="p-4 flex gap-2">
-                            <button class="flex-1 btn-primary py-2 rounded-xl text-white font-medium text-sm flex items-center justify-center gap-2">
+                        <img src="${img.url}" alt="生成的配图" class="w-full h-48 object-cover">
+                        <div class="p-4">
+                            <button onclick="downloadImage('${img.url}', 'image-${index + 1}.png')" class="w-full btn-primary py-2 rounded-xl text-white font-medium text-sm flex items-center justify-center gap-2 cursor-pointer">
                                 <i data-lucide="download" class="w-4 h-4"></i>
-                                下载
+                                下载图片
                             </button>
-                            <button class="px-4 py-2 glass rounded-xl flex items-center justify-center">
-                                <i data-lucide="share-2" class="w-4 h-4 text-slate-600"></i>
-                            </button>
+                            <p class="text-xs text-slate-500 text-center mt-2">💡 也可长按图片保存到相册</p>
                         </div>
                     </div>
                 `;
@@ -349,6 +382,48 @@
             resultsSection.classList.remove('hidden');
             resultsSection.scrollIntoView({ behavior: 'smooth' });
         }
+        
+        // 下载图片功能
+        function downloadImage(url, filename) {
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            link.target = '_blank';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+        
+        // 密码验证
+        function checkPassword() {
+            const password = document.getElementById('passwordInput').value;
+            const overlay = document.getElementById('passwordOverlay');
+            const main = document.getElementById('mainContent');
+            const errorMsg = document.getElementById('errorMsg');
+            
+            if (password === 'evan') {
+                // 密码正确，隐藏遮罩，显示主内容
+                overlay.classList.add('hidden');
+                main.classList.remove('hidden');
+                // 保存登录状态到 localStorage
+                localStorage.setItem('articleGeneratorAuth', 'true');
+            } else {
+                // 密码错误
+                errorMsg.classList.remove('hidden');
+                document.getElementById('passwordInput').value = '';
+                document.getElementById('passwordInput').focus();
+            }
+        }
+        
+        // 页面加载时检查登录状态
+        document.addEventListener('DOMContentLoaded', function() {
+            const isLoggedIn = localStorage.getItem('articleGeneratorAuth');
+            if (isLoggedIn === 'true') {
+                document.getElementById('passwordOverlay').classList.add('hidden');
+                document.getElementById('mainContent').classList.remove('hidden');
+            }
+        });
     </script>
+</main>
 </body>
 </html>
