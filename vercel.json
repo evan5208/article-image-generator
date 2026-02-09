@@ -1,14 +1,10 @@
 {
   "version": 2,
-  "framework": null,
-  "functions": {
-    "api/*.js": {
-      "maxDuration": 30
-    }
-  },
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" }
+  "builds": [
+    { "src": "api/**/*.js", "use": "@vercel/node" }
   ],
-  "cleanUrls": true,
-  "trailingSlash": false
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/(.*)", "dest": "/$1", "status": 200 }
+  ]
 }
