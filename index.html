@@ -264,7 +264,7 @@
 
         // 官方 Gemini API 配置
         const API_KEY = 'AIzaSyCWZhr9vUaNJHXULNCxhN1gtWg4tbCmlFo';
-        const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent';
+        const BASE = "https://generativelanguage.googleapis.com/v1beta";
 
         // 提示词模板
         const PROMPTS = {
@@ -290,33 +290,45 @@
 
         // 调用官方 Gemini API 生成图片
         async function callGemini(prompt) {
-            // 官方 Gemini API
-            const response = await fetch(API_URL + '?key=' + API_KEY, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+            if (!API_KEY) throw new Error("Missing API key");
+            
+            // 获取可用模型列表
+            const modelsRes = await fetch(`${BASE}/models?key=${API_KEY}`);
+            const modelsText = await modelsRes.text();
+            if (!modelsRes.ok) throw new Error(`listModels ${modelsRes.status}: ${modelsText}`);
+            const models = JSON.parse(modelsText).models ?? [];
+            
+            // 自动选择图像模型
+            const modelName = models.find(m => /image|vision|preview/i.test(m.name))?.name 
+                           ?? models[0]?.name 
+                           ?? "";
+            const model = modelName.replace(/^models\//, "");
+            
+            if (!model) throw new Error("No models available");
+            
+            const url = `${BASE}/models/${model}:generateContent?key=${API_KEY}`;
+            
+            const response = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: {
-                        responseModalities: ['IMAGE'],
-                        imageConfig: { aspectRatio: '16:9', imageSize: '1K' }
-                    }
+                    contents: [{ parts: [{ text: prompt }] }]
                 })
             });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`API Error ${response.status}: ${errorText}`);
+            
+            const raw = await response.text();
+            if (!response.ok) throw new Error(`generateContent ${response.status}: ${raw}`);
+            
+            const data = JSON.parse(raw);
+            const parts = data?.candidates?.[0]?.content?.parts ?? [];
+            const inline = parts.find(p => p.inlineData?.data)?.inlineData?.data;
+            
+            if (!inline) {
+                const text = parts.map(p => p.text).filter(Boolean).join(" ");
+                throw new Error(`No image returned. Text: ${text || "(empty)"}`);
             }
-
-            const data = await response.json();
-            if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].inlineData) {
-                const imageData = data.candidates[0].content.parts[0].inlineData.data;
-                return 'data:image/jpeg;base64,' + imageData;
-            } else {
-                throw new Error('API返回格式错误: ' + JSON.stringify(data));
-            }
+            
+            return "data:image/png;base64," + inline;
         }
 
         // Generate button
